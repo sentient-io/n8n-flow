@@ -1,0 +1,240 @@
+{
+  "name": "Wasabi WorkFlow",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analise input params and call proper MCP client tool & response the same output form it.\n\nrequest for {{ $json.body.action }}\n\nInput are :\nbucket_name : {{ $json.body.bucket_name }}\nkey : {{ $json.body.key }}\nfile_content : {{ $json.body.file_content }}\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -1320,
+        -300
+      ],
+      "id": "54a80ee8-071c-4c4a-8bff-feb87222aa65",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "sseEndpoint": "https://wasabi-dev-mcp.sentient.io/mcp/sse"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [
+        -1060,
+        -80
+      ],
+      "id": "869464f1-1004-4251-8e20-a62c409f2e8b",
+      "name": "Wasabi MCP Client"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1400,
+        -80
+      ],
+      "id": "4a06f1fc-7467-4d73-aef2-28bc9694c33b",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ccn6QQ4WVrWKookN",
+          "name": "Google Gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the raw string\ntry {\n  let raw = $input.first().json.output;\n  \n  // Remove starting ``````\n  let cleaned = raw.trim()\n      .replace(/^```json\\s*\\n/, '')\n      .replace(/```$/, '')\n  \n  // Now parse the cleaned JSON string\n  let output = JSON.parse(cleaned);\n  \n  return output;\n}\ncatch(err) {\n  console.log(err)\n  return [{\"output\" : $input.first().json.output}]\n  \n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -940,
+        -300
+      ],
+      "id": "655362f9-ce75-4608-a239-55183cf6a156",
+      "name": "Generate Final Output"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wasabi",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1560,
+        -640
+      ],
+      "id": "caff1d81-4869-41b4-9505-f5aec27e0b51",
+      "name": "Wasabi - Webhook",
+      "webhookId": "37ab70b8-04a4-4af8-80f9-64f23837a44a"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{ $json.body.bucket_name }}",
+        "fileName": "={{ $json.body.key }}",
+        "binaryPropertyName": "file",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -1300,
+        -500
+      ],
+      "id": "f77bc099-d6dd-44ca-a2d2-b10ccb0a47e5",
+      "name": "S3",
+      "credentials": {
+        "s3": {
+          "id": "t9ByZt6sqJGoi5bu",
+          "name": "Wasabi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "367d92f7-181d-4c11-86cc-ce28ec7b340b",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "upload",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1540,
+        -400
+      ],
+      "id": "043aa0a4-df5e-4b54-af37-79e8bdfbf242",
+      "name": "Checking is Upload"
+    },
+    {
+      "parameters": {
+        "jsCode": "if($input.first().json.success){\n  return [{\"message\" : \"Successfully file uploaded\", \"status\" :  \"Success\"}]\n}\nelse{\n  return[{\"message\": \"Internal Server Error\", \"status\": \"Failure\"}]\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -940,
+        -500
+      ],
+      "id": "ad178210-5cdb-4dc1-9e71-dd35ca6918f6",
+      "name": "Generate Final Output1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Wasabi MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Generate Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wasabi - Webhook": {
+      "main": [
+        [
+          {
+            "node": "Checking is Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3": {
+      "main": [
+        [
+          {
+            "node": "Generate Final Output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checking is Upload": {
+      "main": [
+        [
+          {
+            "node": "S3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "74490ee1-bc0d-4d9e-9ced-dae7afec2667",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ecd6d69669e5a1ef1e4ab4d2c0ffa7a567b2254646d518295df1e50fc11c25ea"
+  },
+  "id": "8mJJPLquwuiJIwcD",
+  "tags": []
+}
